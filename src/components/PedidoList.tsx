@@ -471,7 +471,7 @@ export function PedidoList({
       return;
     }
 
-    if (statusAtual === "F" && statusAnterior !== "F") {
+    if (statusAtual === "AC" && statusAnterior !== "AC") {
       console.log("🔊 [SOM] Pedido selecionado mudou para F:", selecionado.nunota);
       setTimeout(() => tocarSomAlerta(), 100);
     }
