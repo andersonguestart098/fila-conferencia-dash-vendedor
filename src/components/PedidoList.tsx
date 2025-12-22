@@ -10,7 +10,6 @@ import Lottie from "lottie-react";
 import caixaOkAnim from "../assets/lotties/caixaEmbaladaCheck.json";
 import caixaAnim from "../assets/lotties/caixaAbrindoFechando.json";
 import temporizadorAnim from "../assets/lotties/temporizador.json";
-import atencaoAnim from "../assets/lotties/atencao.json";
 
 interface PedidoListProps {
   pedidos: DetalhePedido[];
@@ -91,8 +90,8 @@ function escapeHtml(s: any) {
 function tocarSomAlerta() {
   try {
     const audio = new Audio("/audio/efeitoSonoro.wav");
-    audio.volume = 0.7; // Volume moderado
-    audio.play().catch(e => console.log("Erro ao tocar som:", e));
+    audio.volume = 0.7;
+    audio.play().catch((e) => console.log("Erro ao tocar som:", e));
     console.log("🔊 Som de alerta disparado");
   } catch (error) {
     console.error("Erro ao criar áudio:", error);
@@ -139,11 +138,6 @@ function imprimirExpedicao(p: DetalhePedido, conferente?: Conferente | null) {
           font-weight: 800;
           margin: 5px 0;
           color: #333;
-        }
-        .subtitle {
-          font-size: 14px;
-          margin: 5px 0;
-          color: #666;
         }
         .top { 
           display:flex; 
@@ -278,7 +272,10 @@ function imprimirExpedicao(p: DetalhePedido, conferente?: Conferente | null) {
         </table>
 
         <div class="total-info">
-          TOTAL DE ITENS: ${itens.length} | TOTAL DE UNIDADES: ${itens.reduce((sum, item) => sum + item.qtd, 0)}
+          TOTAL DE ITENS: ${itens.length} | TOTAL DE UNIDADES: ${itens.reduce(
+    (sum, item) => sum + item.qtd,
+    0
+  )}
         </div>
 
         <p class="muted">Obs: conferir quantidades e integridade dos itens antes da expedição.</p>
@@ -316,9 +313,9 @@ function imprimirExpedicao(p: DetalhePedido, conferente?: Conferente | null) {
 }
 
 type TimerState = {
-  startAt: number | null; // quando começou a contar (em AC)
-  elapsedMs: number; // acumulado (quando pausado/finalizado)
-  running: boolean; // está contando agora
+  startAt: number | null;
+  elapsedMs: number;
+  running: boolean;
 };
 
 type TimerMap = Record<number, TimerState>;
@@ -342,23 +339,7 @@ function saveTimers(next: TimerMap) {
   }
 }
 
-function loadAckMap(): Record<number, boolean> {
-  try {
-    return JSON.parse(localStorage.getItem("attentionAckByNunota") || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveAckMap(next: Record<number, boolean>) {
-  try {
-    localStorage.setItem("attentionAckByNunota", JSON.stringify(next));
-  } catch {
-    // ignore
-  }
-}
-
-// ✅ salva conferente por pedido (local), pra UX ficar boa mesmo antes do backend devolver no GET
+// ✅ salva conferente por pedido (local)
 type ConferenteByNunota = Record<number, Conferente>;
 function loadConferenteByNunota(): ConferenteByNunota {
   try {
@@ -390,7 +371,6 @@ export function PedidoList({
   const [somenteAguardando, setSomenteAguardando] = useState(false);
   const [vendedorFiltro, setVendedorFiltro] = useState<string | null>(null);
   const [mostrarListaVendedores, setMostrarListaVendedores] = useState(false);
-  const [somAlertaDesativado, setSomAlertaDesativado] = useState(false); // ✅ Novo estado para controlar som
 
   // ✅ timers persistentes por nunota
   const [timerByNunota, setTimerByNunota] = useState<TimerMap>(() => loadTimers());
@@ -400,22 +380,15 @@ export function PedidoList({
     () => loadConferenteByNunota()
   );
 
-  // ✅ popover de impressão (qual pedido está "abrindo" o select)
+  // ✅ popover de impressão
   const [printNunotaOpen, setPrintNunotaOpen] = useState<number | null>(null);
   const [printConferenteId, setPrintConferenteId] = useState<number | "">("");
 
-  // ✅ MODAL GLOBAL de atenção (pedido em alerta)
-  const [pedidoEmAtencao, setPedidoEmAtencao] = useState<DetalhePedido | null>(null);
-
-  // ✅ Estado para controlar loading do botão de confirmação
+  // ✅ loading do botão de confirmação
   const [loadingConfirmacao, setLoadingConfirmacao] = useState<number | null>(null);
 
-  // ✅ Refs para controle de som
-  const ultimoAlertaSomRef = useRef<number>(0);
-  const somIntervalRef = useRef<number | null>(null);
-  
-  // ✅ Novo: Rastreamento dos últimos status para detectar mudanças
-  const [ultimosStatus, setUltimosStatus] = useState<Record<number, string>>({});
+  // ✅ FINANCEIRO: último status do pedido selecionado (pra detectar transição -> F)
+  const ultimoStatusSelecionadoRef = useRef<string | null>(null);
 
   // ⏱ força re-render 1x/segundo pro mm:ss andar
   const [, forceTick] = useState(0);
@@ -440,7 +413,7 @@ export function PedidoList({
 
         const current = next[nunota] ?? { startAt: null, elapsedMs: 0, running: false };
 
-        // 1) Entrou em AC => inicia (se ainda não estiver rodando)
+        // 1) Entrou em AC => inicia
         if (statusCode === "AC") {
           if (!current.running) {
             next[nunota] = { startAt: now, elapsedMs: current.elapsedMs, running: true };
@@ -450,7 +423,7 @@ export function PedidoList({
           continue;
         }
 
-        // 2) Virou Finalizada OK => para e congela tempo (se estava rodando)
+        // 2) Virou Finalizada OK => para e congela tempo
         if (isFinalizadaOk) {
           if (current.running && current.startAt) {
             const elapsed = current.elapsedMs + (now - current.startAt);
@@ -461,7 +434,7 @@ export function PedidoList({
           continue;
         }
 
-        // 3) Saiu do AC para qualquer outro status => pausa
+        // 3) Saiu do AC => pausa
         if (current.running && current.startAt) {
           const elapsed = current.elapsedMs + (now - current.startAt);
           next[nunota] = { startAt: null, elapsedMs: elapsed, running: false };
@@ -475,196 +448,57 @@ export function PedidoList({
     });
   }, [pedidos]);
 
-  // ✅ CORREÇÃO: Detecta mudanças de status para AC e toca som
+  // ✅ SOM (FINANCEIRO): APENAS quando o pedido SELECIONADO mudar para "F"
   useEffect(() => {
-    if (!pedidos?.length || somAlertaDesativado) return;
-    
-    const novosStatus: Record<number, string> = {};
-    pedidos.forEach(p => {
-      novosStatus[p.nunota] = normalizeStatus((p as any).statusConferencia);
-    });
-    
-    // Detecta mudanças
-    pedidos.forEach((p) => {
-      const nunota = p.nunota;
-      const novoStatus = novosStatus[nunota];
-      const statusAnterior = ultimosStatus[nunota];
-      
-      // Se o status mudou para AC (independente do status anterior)
-      if (novoStatus === "AC" && statusAnterior !== "AC") {
-        console.log("🔊 [SOM] Status mudou para AC:", nunota, "anterior:", statusAnterior);
-        
-        // Dispara som com pequeno delay para garantir
-        setTimeout(() => {
-          tocarSomAlerta();
-        }, 100);
-      }
-    });
-    
-    // Atualiza o registro de status
-    setUltimosStatus(novosStatus);
-    
-  }, [pedidos, somAlertaDesativado]);
-
-  // ✅ Controle de som para pedidos com mais de 5 minutos
-  useEffect(() => {
-    if (!pedidos?.length || somAlertaDesativado) {
-      // Limpa intervalo se não há pedidos ou som está desativado
-      if (somIntervalRef.current) {
-        window.clearInterval(somIntervalRef.current);
-        somIntervalRef.current = null;
-      }
+    if (!selecionado?.nunota) {
+      ultimoStatusSelecionadoRef.current = null;
       return;
     }
 
-    // Encontra todos os pedidos em AC com mais de 5 minutos
-    const pedidosComMaisDe5Min = pedidos.filter((p) => {
-      const statusCode = normalizeStatus((p as any).statusConferencia);
-      if (statusCode !== "AC") return false;
-      
-      const timer = timerByNunota[p.nunota];
-      if (!timer) return false;
-      
-      const now = Date.now();
-      const elapsedMs = timer.running && timer.startAt 
-        ? timer.elapsedMs + (now - timer.startAt) 
-        : timer.elapsedMs;
-      
-      return elapsedMs >= 5 * 60 * 1000; // 5 minutos
-    });
+    const pedidoAtual = pedidos.find((p) => p.nunota === selecionado.nunota) ?? null;
 
-    // Se há pedidos com mais de 5 minutos, configura intervalo de som
-    if (pedidosComMaisDe5Min.length > 0) {
-      if (!somIntervalRef.current) {
-        console.log("🔊 [SOM] Configurando intervalo de som para pedidos com +5min");
-        somIntervalRef.current = window.setInterval(() => {
-          // Toca som a cada 5 segundos
-          const agora = Date.now();
-          if (agora - ultimoAlertaSomRef.current >= 5000) {
-            tocarSomAlerta();
-            ultimoAlertaSomRef.current = agora;
-            console.log("🔊 [SOM] Alerta periódico para pedidos com +5min");
-          }
-        }, 5000); // Verifica a cada 5 segundos
-      }
-    } else {
-      // Limpa intervalo se não há pedidos com mais de 5 minutos
-      if (somIntervalRef.current) {
-        window.clearInterval(somIntervalRef.current);
-        somIntervalRef.current = null;
-        console.log("🔊 [SOM] Intervalo de som limpo - nenhum pedido com +5min");
-      }
-    }
-
-    // Cleanup
-    return () => {
-      if (somIntervalRef.current) {
-        window.clearInterval(somIntervalRef.current);
-        somIntervalRef.current = null;
-      }
-    };
-  }, [pedidos, timerByNunota, somAlertaDesativado]);
-
-  // ✅ Detecta GLOBALMENTE pedido em atenção (AC >= 5min e sem ACK) e liga modal
-  useEffect(() => {
-    if (!pedidos?.length) {
-      setPedidoEmAtencao(null);
+    if (!pedidoAtual) {
+      ultimoStatusSelecionadoRef.current = null;
       return;
     }
 
-    const now = Date.now();
-    const ack = loadAckMap();
+    const statusAtual = normalizeStatus((pedidoAtual as any).statusConferencia);
+    const statusAnterior = ultimoStatusSelecionadoRef.current;
 
-    // prioridade: maior tempo em AC (e sem ACK)
-    const candidatos = pedidos
-      .filter((p) => normalizeStatus((p as any).statusConferencia) === "AC")
-      .filter((p) => !ack[p.nunota])
-      .map((p) => {
-        const t = timerByNunota[p.nunota];
-        if (!t) return { p, ms: 0 };
-        const ms = t.running && t.startAt ? t.elapsedMs + (now - t.startAt) : t.elapsedMs;
-        return { p, ms };
-      })
-      .filter((x) => x.ms >= 5 * 60 * 1000)
-      .sort((a, b) => b.ms - a.ms);
-
-    const escolhido = candidatos[0]?.p ?? null;
-
-    if (escolhido?.nunota !== pedidoEmAtencao?.nunota) {
-      console.log("🚨 [MODAL ATENÇÃO] escolhido:", escolhido?.nunota ?? null);
+    // Troca de selecionado: só sincroniza sem apitar
+    if (statusAnterior === null) {
+      ultimoStatusSelecionadoRef.current = statusAtual;
+      return;
     }
 
-    setPedidoEmAtencao(escolhido);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pedidos, timerByNunota]);
+    if (statusAtual === "F" && statusAnterior !== "F") {
+      console.log("🔊 [SOM] Pedido selecionado mudou para F:", selecionado.nunota);
+      setTimeout(() => tocarSomAlerta(), 100);
+    }
 
-  // ✅ AUTO-SELEÇÃO a cada 35s:
-  // - se houver pedidoEmAtencao, seleciona ele
-  // - senão, seleciona o mais recente da lista filtrada (primeiro da tela)
+    ultimoStatusSelecionadoRef.current = statusAtual;
+  }, [pedidos, selecionado?.nunota]);
+
+  // ✅ AUTO-SELEÇÃO a cada 35s (mantido do teu arquivo)
   const lastAutoRef = useRef<number>(0);
+  const filtradosRef = useRef<DetalhePedido[]>([]);
   useEffect(() => {
     const id = window.setInterval(() => {
       const now = Date.now();
       if (now - lastAutoRef.current < 35_000) return;
 
-      let alvo: DetalhePedido | null = null;
+      const firstVisible = (filtradosRef.current?.[0] as DetalhePedido | undefined) ?? null;
 
-      if (pedidoEmAtencao) {
-        alvo = pedidoEmAtencao;
-      } else {
-        // "mais recente" = o primeiro visível (ou maior nunota se quiser)
-        // Aqui: prioriza o primeiro da lista filtrada na tela
-        // (se preferir por nunota maior, te digo abaixo)
-        // @ts-ignore
-        const firstVisible = (filtradosRef.current?.[0] as DetalhePedido | undefined) ?? null;
-        alvo = firstVisible;
-      }
-
-      if (alvo && selecionado?.nunota !== alvo.nunota) {
-        console.log("🔁 [AUTO-SELECT 35s] voltando seleção para:", alvo.nunota);
-        onSelect(alvo);
+      if (firstVisible && selecionado?.nunota !== firstVisible.nunota) {
+        console.log("🔁 [AUTO-SELECT 35s] voltando seleção para:", firstVisible.nunota);
+        onSelect(firstVisible);
       }
 
       lastAutoRef.current = now;
     }, 1000);
 
     return () => window.clearInterval(id);
-  }, [pedidoEmAtencao, selecionado?.nunota, onSelect]);
-
-  // ✅ Função para parar o som quando clicar no OK do modal
-  const handleAckModal = (nunota: number) => {
-    // Para o som imediatamente
-    if (somIntervalRef.current) {
-      window.clearInterval(somIntervalRef.current);
-      somIntervalRef.current = null;
-      console.log("🔊 [SOM] Intervalo de som parado via OK modal");
-    }
-    
-    // Salva o ACK no localStorage
-    const ack = loadAckMap();
-    ack[nunota] = true;
-    saveAckMap(ack);
-    
-    // Fecha o modal
-    setPedidoEmAtencao(null);
-  };
-
-  // ✅ Função para alternar o estado do som
-  const toggleSomAlerta = () => {
-    const novoEstado = !somAlertaDesativado;
-    setSomAlertaDesativado(novoEstado);
-    
-    if (novoEstado) {
-      // Se está desativando, para o som
-      if (somIntervalRef.current) {
-        window.clearInterval(somIntervalRef.current);
-        somIntervalRef.current = null;
-        console.log("🔊 [SOM] Alerta de +5min desativado pelo usuário");
-      }
-    } else {
-      console.log("🔊 [SOM] Alerta de +5min ativado pelo usuário");
-    }
-  };
+  }, [selecionado?.nunota, onSelect]);
 
   useEffect(() => {
     setPagina(1);
@@ -696,8 +530,6 @@ export function PedidoList({
     });
   }, [busca, pedidos, somenteAguardando, vendedorFiltro]);
 
-  // ✅ ref do filtrados para o auto-select pegar "mais recente visível"
-  const filtradosRef = useRef<DetalhePedido[]>([]);
   useEffect(() => {
     filtradosRef.current = filtrados;
   }, [filtrados]);
@@ -711,7 +543,6 @@ export function PedidoList({
     dispararAlertasVoz(pedidos);
   }, [pedidos]);
 
-  // ✅ pega conferente para exibir no card (prioridade: backend -> local -> null)
   function getConferenteExibicao(p: any): Conferente | null {
     const nomeBackend = (p as any).conferenteNome as string | undefined;
     const idBackend = (p as any).conferenteId as number | undefined;
@@ -723,34 +554,20 @@ export function PedidoList({
     return conferenteByNunota[p.nunota] ?? null;
   }
 
-  // ✅ fluxo final: salvar conferente + iniciar + imprimir
   async function confirmarConferenteEImprimir(p: DetalhePedido, conf: Conferente) {
-    // Define o estado de loading para este pedido específico
     setLoadingConfirmacao(p.nunota);
-    
-    try {
-      console.log("🧑‍💼 [CONFERENTE] salvando no Mongo:", {
-        nunota: p.nunota,
-        nome: conf.nome,
-        codUsuario: conf.codUsuario,
-      });
 
+    try {
       await api.post("/api/conferencia/conferente", {
         nunota: p.nunota,
         nome: conf.nome,
         codUsuario: conf.codUsuario,
       });
 
-      // salva local por UX
       setConferenteByNunota((prev) => {
         const next = { ...prev, [p.nunota]: conf };
         saveConferenteByNunota(next);
         return next;
-      });
-
-      console.log("🚀 [INICIAR] iniciando conferência:", {
-        nunotaOrig: p.nunota,
-        codUsuario: conf.codUsuario,
       });
 
       await api.post("/api/conferencia/iniciar", {
@@ -758,45 +575,25 @@ export function PedidoList({
         codUsuario: conf.codUsuario,
       });
 
-      // seleciona o pedido (pra detalhar)
       onSelect(p);
-
-      // imprime com nome do arquivo personalizado
       imprimirExpedicao(p, conf);
 
-      // fecha popover
       setPrintNunotaOpen(null);
       setPrintConferenteId("");
     } catch (e: any) {
       console.error("❌ erro salvar conferente / iniciar / imprimir:", e);
       alert("Erro ao salvar conferente / iniciar conferência / imprimir.");
     } finally {
-      // Remove o estado de loading independente do resultado
       setLoadingConfirmacao(null);
     }
   }
 
-  if (loadingInicial && pedidos.length === 0) {
-    return <div className="center">Carregando…</div>;
-  }
-
-  if (erro && pedidos.length === 0) {
-    return <div className="center">{erro}</div>;
-  }
-
-  // ✅ CORREÇÃO: Calcula attentionInfo diretamente sem useMemo problemático
-  // Isso evita o erro de ordem dos hooks
-  const attentionInfo = pedidoEmAtencao ? (() => {
-    const now = Date.now();
-    const t = timerByNunota[pedidoEmAtencao.nunota];
-    if (!t) return { ms: 0, mmss: "00:00" };
-    const ms = t.running && t.startAt ? t.elapsedMs + (now - t.startAt) : t.elapsedMs;
-    return { ms, mmss: formatElapsed(ms) };
-  })() : null;
+  if (loadingInicial && pedidos.length === 0) return <div className="center">Carregando…</div>;
+  if (erro && pedidos.length === 0) return <div className="center">{erro}</div>;
 
   return (
     <div>
-      {/* ✅ Toolbar (somente busca + filtros) */}
+      {/* ✅ Toolbar */}
       <div
         className="cards-toolbar"
         style={{
@@ -857,27 +654,6 @@ export function PedidoList({
             </div>
           )}
         </div>
-
-        {/* ✅ Botão para desativar/ativar o som de alerta de +5min */}
-        <button
-          className={`chip ${somAlertaDesativado ? "chip-inactive" : "chip-active"}`}
-          onClick={toggleSomAlerta}
-          title={`${somAlertaDesativado ? "Ativar" : "Desativar"} som de alerta para pedidos com +5min`}
-        >
-          {somAlertaDesativado ? "🔇 Som desativado" : "🔊 Som ativado"}
-        </button>
-        
-        {/* Botão de teste temporário - pode remover depois */}
-        <button
-          className="chip"
-          onClick={() => {
-            console.log("🔊 Testando som manualmente");
-            tocarSomAlerta();
-          }}
-          style={{ marginLeft: '10px' }}
-        >
-          Testar Som
-        </button>
       </div>
 
       <div className="cards-grid">
@@ -905,9 +681,6 @@ export function PedidoList({
               : timer.elapsedMs;
 
           const elapsedMin = Math.floor(liveElapsedMs / 60000);
-
-          // ⚠️ alertas só valem enquanto AC
-          const alerta5min = aguardando && elapsedMin >= 5;
           const alerta25min = aguardando && elapsedMin >= 25;
 
           const confExibicao = getConferenteExibicao(p);
@@ -922,14 +695,11 @@ export function PedidoList({
                 (isSelected ? " card-selected" : "") +
                 (alerta25min ? " card-pulse" : "")
               }
-              onClick={() => {
-                console.log("🖱️ [SELECT] clicou no card:", p.nunota);
-                onSelect(p);
-              }}
+              onClick={() => onSelect(p)}
             >
               <div className="card-header compact">
                 <div className="header-left compact">
-                  {/* 📦 Caixa (Lottie diferente pra OK vs demais) */}
+                  {/* 📦 Caixa */}
                   {isFinalizadaOk ? (
                     <div className="box-lottie box-lottie-ok">
                       <Lottie animationData={caixaOkAnim} loop={false} autoplay />
@@ -940,7 +710,6 @@ export function PedidoList({
                     </div>
                   )}
 
-                  {/* ✅ Corpo do card em 2 colunas: esquerda / direita */}
                   <div className="card-body-2col">
                     {/* ===== ESQUERDA ===== */}
                     <div className="card-left">
@@ -957,7 +726,6 @@ export function PedidoList({
                       {p.nomeVendedor && <div className="line">👤 {p.nomeVendedor}</div>}
                       <div className="line">📦 {p.itens.length} itens</div>
 
-                      {/* ✅ conferente por pedido */}
                       <div className="line" style={{ opacity: 0.9 }}>
                         🧑‍💼 Conferente: {confExibicao?.nome ?? "(não definido)"}
                       </div>
@@ -965,7 +733,7 @@ export function PedidoList({
 
                     {/* ===== DIREITA ===== */}
                     <div className="card-right" style={{ position: "relative" }}>
-                      {/* Status (maior) */}
+                      {/* Status */}
                       <div
                         className="status-pill"
                         style={{
@@ -978,11 +746,7 @@ export function PedidoList({
                       >
                         <div
                           className="status-dot"
-                          style={{
-                            backgroundColor: colors.text,
-                            width: 10,
-                            height: 10,
-                          }}
+                          style={{ backgroundColor: colors.text, width: 10, height: 10 }}
                         />
                         <span
                           className="status-text"
@@ -997,7 +761,7 @@ export function PedidoList({
                         </span>
                       </div>
 
-                      {/* ⏱ Timer (nunca some) */}
+                      {/* ⏱ Timer (sem lottie de atenção) */}
                       <div className={"timer-box" + (alerta25min ? " timer-box-hot" : "")}>
                         <div className="timer-top">
                           <div className="timer-lottie">
@@ -1010,7 +774,6 @@ export function PedidoList({
                           <div className="timer-time">{formatElapsed(liveElapsedMs)}</div>
                         </div>
 
-                        {/* ✅ texto melhorado ao lado do tempo */}
                         <div className="timer-sub">
                           {aguardando
                             ? "tempo acumulado até iniciar conferência"
@@ -1018,43 +781,20 @@ export function PedidoList({
                             ? "tempo total"
                             : "tempo acumulado"}
                         </div>
-
-                        {/* ⚠ Atenção após 5min (somente AC) */}
-                        {alerta5min && (
-                          <div className="attention-inline">
-                            <div className="attention-lottie">
-                              <Lottie animationData={atencaoAnim} loop autoplay />
-                            </div>
-                            <span>+5 min</span>
-                          </div>
-                        )}
                       </div>
 
-                      {/* 🖨 Botão Impressão SEMPRE VISÍVEL - removida condição de aguardando */}
-                      {/* ✅ Botão SEMPRE visível, mas com comportamento diferente por status */}
+                      {/* 🖨 Botão impressão */}
                       <button
                         className={`btn-start ${!aguardando ? "btn-start-inactive" : ""}`}
                         onClick={(e) => {
                           e.stopPropagation();
 
-                          console.log("🖨️ [PRINT] clique no imprimir:", {
-                            nunota: p.nunota,
-                            status: statusBase,
-                            temConferente: !!confExibicao,
-                            conferente: confExibicao?.nome ?? null,
-                          });
-
                           if (!aguardando) {
-                            // Se não está aguardando, apenas imprime sem iniciar conferência
-                            if (confExibicao) {
-                              imprimirExpedicao(p, confExibicao);
-                            } else {
-                              imprimirExpedicao(p);
-                            }
+                            if (confExibicao) imprimirExpedicao(p, confExibicao);
+                            else imprimirExpedicao(p);
                             return;
                           }
 
-                          // Se está aguardando, abre popover para escolher conferente e iniciar
                           setPrintNunotaOpen(p.nunota);
                           const presetId = confExibicao?.codUsuario ?? "";
                           setPrintConferenteId(presetId as any);
@@ -1067,12 +807,10 @@ export function PedidoList({
                         }}
                         disabled={isLoadingThis}
                       >
-                        <span style={{ display: "inline-flex", alignItems: "center" }}>
-                          🖨️ {!aguardando && ""}
-                        </span>
+                        <span style={{ display: "inline-flex", alignItems: "center" }}>🖨️</span>
                       </button>
 
-                      {/* Popover de seleção por pedido (só aparece para AC) */}
+                      {/* Popover de seleção (só AC) */}
                       {aguardando && printOpenThis && (
                         <div
                           onClick={(e) => e.stopPropagation()}
@@ -1100,7 +838,6 @@ export function PedidoList({
                               const cod = Number(e.target.value || 0);
                               const found =
                                 CONFERENTES.find((c) => c.codUsuario === cod) || null;
-                              console.log("✅ [PRINT] conferente selecionado:", found);
                               setPrintConferenteId(found?.codUsuario ?? "");
                             }}
                             style={{ width: "100%", marginBottom: 10 }}
@@ -1118,7 +855,6 @@ export function PedidoList({
                             <button
                               className="chip"
                               onClick={() => {
-                                console.log("❎ [PRINT] cancelar popover:", p.nunota);
                                 setPrintNunotaOpen(null);
                                 setPrintConferenteId("");
                               }}
@@ -1134,11 +870,6 @@ export function PedidoList({
                                 const found =
                                   CONFERENTES.find((c) => c.codUsuario === cod) || null;
 
-                                console.log("✅ [PRINT] confirmar:", {
-                                  nunota: p.nunota,
-                                  conferente: found,
-                                });
-
                                 if (!found) {
                                   alert("Selecione o conferente.");
                                   return;
@@ -1147,27 +878,26 @@ export function PedidoList({
                                 confirmarConferenteEImprimir(p, found);
                               }}
                               disabled={isLoadingThis}
-                              style={{ 
-                                position: 'relative',
-                                minWidth: '120px'
-                              }}
+                              style={{ position: "relative", minWidth: "120px" }}
                             >
                               {isLoadingThis ? (
                                 <>
-                                  <span style={{ 
-                                    display: 'inline-block',
-                                    width: '16px',
-                                    height: '16px',
-                                    border: '2px solid rgba(255,255,255,0.3)',
-                                    borderTop: '2px solid white',
-                                    borderRadius: '50%',
-                                    animation: 'spin 1s linear infinite',
-                                    marginRight: '8px'
-                                  }} />
+                                  <span
+                                    style={{
+                                      display: "inline-block",
+                                      width: "16px",
+                                      height: "16px",
+                                      border: "2px solid rgba(255,255,255,0.3)",
+                                      borderTop: "2px solid white",
+                                      borderRadius: "50%",
+                                      animation: "spin 1s linear infinite",
+                                      marginRight: "8px",
+                                    }}
+                                  />
                                   Processando...
                                 </>
                               ) : (
-                                'Confirmar e imprimir'
+                                "Confirmar e imprimir"
                               )}
                             </button>
                           </div>
@@ -1182,53 +912,6 @@ export function PedidoList({
           );
         })}
       </div>
-
-      {/* ===============================
-          ✅ MODAL GLOBAL DE ATENÇÃO (FULL SCREEN)
-          - aparece sempre após 5 min em AC (sem ACK)
-          - não depende de card selecionado
-      =============================== */}
-      {pedidoEmAtencao && (
-        <div
-          className="attention-overlay"
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 999999,
-          }}
-          onClick={() => {
-            // clique fora NÃO fecha (pra não sumir sem OK)
-          }}
-        >
-          <div
-            className="attention-overlay-content"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="attention-overlay-lottie">
-              <Lottie animationData={atencaoAnim} loop autoplay />
-            </div>
-
-            <div className="attention-overlay-title">Atenção</div>
-            <div className="attention-overlay-sub">
-              Pedido #{pedidoEmAtencao.nunota} aguardando conferência há mais de 5 minutos.
-            </div>
-
-            <div className="attention-overlay-sub" style={{ fontWeight: 900 }}>
-              Tempo: {attentionInfo?.mmss ?? "00:00"}
-            </div>
-
-            <button
-              className="attention-overlay-ok"
-              onClick={() => {
-                handleAckModal(pedidoEmAtencao.nunota);
-                console.log("✅ [MODAL ATENÇÃO] OK (ACK salvo e som parado):", pedidoEmAtencao.nunota);
-              }}
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Paginação */}
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10 }}>
@@ -1258,29 +941,16 @@ export function PedidoList({
         </div>
       </div>
 
-      {/* Estilos CSS para os novos componentes */}
       <style>{`
-        .chip-inactive {
-          background-color: #f0f0f0;
-          color: #666;
-          border: 1px solid #ddd;
-        }
-        
-        .chip-inactive:hover {
-          background-color: #e5e5e5;
-        }
-        
         .btn-start-inactive {
           opacity: 0.7;
           background-color: #e9ecef;
           color: #6c757d;
           border: 1px solid #dee2e6;
         }
-        
         .btn-start-inactive:hover {
           background-color: #dee2e6;
         }
-        
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
