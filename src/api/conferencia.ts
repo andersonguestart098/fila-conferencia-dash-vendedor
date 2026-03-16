@@ -2,6 +2,13 @@
 import { api } from "./client";
 import type { DetalhePedido } from "../types/conferencia";
 
+type PedidosResponse = {
+  pedidos: DetalhePedido[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 // controller compartilhado só pra essa rota
 let pendentesController: AbortController | null = null;
 
@@ -35,13 +42,12 @@ async function getComRetry<T>(
         err?.code === "ECONNABORTED" ||
         String(err?.message || "").includes("timeout");
 
-      const isNetwork = !err?.response; // sem status = caiu antes de responder
+      const isNetwork = !err?.response;
 
       const podeRetry = isTimeout || isNetwork;
 
       if (!podeRetry || i === tentativas) break;
 
-      // backoff simples
       await sleep(400 * (i + 1));
     }
   }
@@ -64,25 +70,40 @@ export async function buscarPedidosPendentes(): Promise<DetalhePedido[] | null> 
 
     const url = "/api/conferencia/pedidos-pendentes";
 
-    // timeout só pra esse endpoint (se quiser manter 30s global)
-    const data = await getComRetry<DetalhePedido[]>(
+    const data = await getComRetry<PedidosResponse | DetalhePedido[]>(
       url,
       {
         signal: pendentesController.signal,
-        timeout: 60000, // pode subir só aqui, ex: 60s
+        timeout: 60000,
       },
-      1 // 1 retry já ajuda muito (total 2 tentativas)
+      1
     );
 
-    // Se veio null/undefined por algum motivo, normaliza
     if (data == null) {
       console.warn("⚠ [API] Sem data, retornando lista vazia");
       return [];
     }
 
-    if (Array.isArray(data)) return data;
+    // ✅ novo formato: { pedidos, total, page, pageSize }
+    if (!Array.isArray(data) && Array.isArray(data.pedidos)) {
+      console.log("✅ [API] Resposta no formato paginado:", {
+        total: data.total,
+        page: data.page,
+        pageSize: data.pageSize,
+        pedidos: data.pedidos.length,
+      });
+      return data.pedidos;
+    }
 
-    console.warn("⚠ [API] Resposta inesperada (data não é array), retornando lista vazia");
+    // ✅ formato antigo: []
+    if (Array.isArray(data)) {
+      console.log("✅ [API] Resposta no formato antigo:", {
+        pedidos: data.length,
+      });
+      return data;
+    }
+
+    console.warn("⚠ [API] Resposta inesperada, retornando lista vazia", data);
     return [];
   } catch (error: any) {
     const isCanceled =
@@ -90,7 +111,6 @@ export async function buscarPedidosPendentes(): Promise<DetalhePedido[] | null> 
       error?.message?.toLowerCase?.().includes("canceled");
 
     if (isCanceled) {
-      // cancel é comportamento esperado quando o poll dispara de novo
       console.log("🟦 [API] Request cancelado (novo poll iniciou).");
       return null;
     }
@@ -104,7 +124,6 @@ export async function buscarPedidosPendentes(): Promise<DetalhePedido[] | null> 
 
     return null;
   } finally {
-    // libera controller (evita abort em request já finalizado)
     pendentesController = null;
   }
 }
