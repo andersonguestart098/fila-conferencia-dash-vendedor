@@ -588,8 +588,42 @@ export function PedidoList({
     }
   }
 
-  if (loadingInicial && pedidos.length === 0) return <div className="center">Carregando…</div>;
-  if (erro && pedidos.length === 0) return <div className="center">{erro}</div>;
+  if (loadingInicial && pedidos.length === 0) {
+  return (
+    <div
+      className="center"
+      style={{
+        minHeight: "70vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "column",
+        gap: 18,
+      }}
+    >
+      <div
+        style={{
+          width: 70,
+          height: 70,
+          border: "6px solid rgba(193, 201, 214, 0.18)",
+          borderTop: "6px solid #C1C9D6",
+          borderRadius: "50%",
+          animation: "spin 0.9s linear infinite",
+        }}
+      />
+
+      <div
+        style={{
+          color: "#C1C9D6",
+          fontWeight: 900,
+          fontSize: 18,
+        }}
+      >
+        Carregando pedidos...
+      </div>
+    </div>
+  );
+}
 
   return (
     <div>

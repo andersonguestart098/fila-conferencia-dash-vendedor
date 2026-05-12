@@ -1,9 +1,13 @@
 // src/api/client.ts
 import axios from "axios";
 
+// ✅ URL centralizada
+export const API_BASE_URL =
+  "https://api-sankhya-fila-conferencia-6bbe82fb50b8.herokuapp.com/";
+
 export const api = axios.create({
-  baseURL: "https://api-sankhya-fila-conferencia-6bbe82fb50b8.herokuapp.com",
-  timeout: 60000, // 60s global (ou deixe 30s e ajuste por request)
+  baseURL: API_BASE_URL,
+  timeout: 60000,
 });
 
 // Marca tempo de início p/ medir duração
@@ -12,7 +16,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Log global (debug) + duração
+// Log global + duração
 api.interceptors.response.use(
   (res) => {
     const start = (res.config as any)?.metadata?.startTime;

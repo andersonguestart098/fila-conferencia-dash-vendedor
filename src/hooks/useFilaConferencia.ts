@@ -1,7 +1,10 @@
 // src/hooks/useFilaConferencia.ts
-import { useEffect, useState } from "react";
+
+import { useCallback, useEffect, useState } from "react";
 import type { DetalhePedido } from "../types/conferencia";
 import { buscarPedidosPendentes } from "../api/conferencia";
+import { conectarConferenciaStream } from "../api/conferenciaStream";
+
 import {
   AudioLogger,
   limparFilaAudio,
@@ -14,90 +17,117 @@ interface UseFilaConferenciaResult {
   erro: string | null;
   selecionado: DetalhePedido | null;
   setSelecionado: (p: DetalhePedido | null) => void;
+  refresh: () => Promise<void>;
 }
 
 export function useFilaConferencia(): UseFilaConferenciaResult {
   const [pedidos, setPedidos] = useState<DetalhePedido[]>([]);
   const [loadingInicial, setLoadingInicial] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
-  const [selecionado, setSelecionado] = useState<DetalhePedido | null>(null);
+  const [selecionado, setSelecionado] =
+    useState<DetalhePedido | null>(null);
 
-  useEffect(() => {
-    AudioLogger.log("INSTANCE_INIT", "Inicializando painel de áudio");
+  const carregar = useCallback(async () => {
+    try {
+      console.log("📡 [API] Buscando pedidos sob demanda...");
 
-    let ativo = true;
-    let isLoading = false;
+      const lista = await buscarPedidosPendentes();
 
-    const carregar = async () => {
-      if (!ativo) return;
-
-      if (isLoading) {
-        AudioLogger.log(
-          "POLL_SKIP",
-          "Pulando busca porque ainda tem uma requisição em andamento"
-        );
+      if (lista === null) {
+        setErro("Erro ao atualizar pedidos.");
+        setLoadingInicial(false);
         return;
       }
-      isLoading = true;
 
-      try {
-        const lista = await buscarPedidosPendentes();
-        if (!ativo) return;
+      setErro(null);
+      setLoadingInicial(false);
 
-        // ❌ Erro/timeout: NÃO mexer em pedidos
-        if (lista === null) {
-          console.warn("⚠ Erro/timeout — mantendo últimos dados");
-          setErro("Erro ao atualizar pedidos (mantendo últimos pedidos).");
-          setLoadingInicial(false);
-          return;
-        }
+      dispararAlertasVoz(lista);
 
-        // ✅ Sucesso: limpa erro
-        setErro(null);
-        setLoadingInicial(false);
+      setPedidos(lista);
 
-        // ✅ Sucesso com lista vazia
-        if (lista.length === 0) {
-          console.log("✔ Sem pedidos pendentes");
-          setPedidos([]);
-          setSelecionado(null);
-          return;
-        }
+      setSelecionado((anterior) => {
+        if (!anterior) return lista[0] ?? null;
 
-        // ✅ Sucesso com pedidos
-        dispararAlertasVoz(lista);
-        setPedidos(lista);
+        const aindaExiste = lista.find(
+          (p) => p.nunota === anterior.nunota
+        );
 
-        setSelecionado((anterior) => {
-          if (!anterior) return lista[0] ?? null;
-          const aindaExiste = lista.find(
-            (p) => p.nunota === anterior.nunota
-          );
-          return aindaExiste ?? lista[0] ?? null;
-        });
-      } catch (e) {
-        console.error("Falha inesperada ao buscar pedidos:", e);
-        if (ativo) {
-          // fallback: erro inesperado (bug, parse, etc)
-          setLoadingInicial(false);
-          setErro("Erro ao atualizar pedidos (mantendo últimos pedidos).");
-        }
-      } finally {
-        isLoading = false;
-      }
-    };
+        return aindaExiste ?? lista[0] ?? null;
+      });
+    } catch (e) {
+      console.error("❌ erro ao buscar pedidos:", e);
 
-    // primeira carga
+      setLoadingInicial(false);
+      setErro("Erro ao atualizar pedidos.");
+    }
+  }, []);
+
+  useEffect(() => {
+    AudioLogger.log(
+      "INSTANCE_INIT",
+      "Inicializando painel admin"
+    );
+
     carregar();
-    // pooling a cada 5s
-    const interval = setInterval(carregar, 5000);
+
+    const disconnect = conectarConferenciaStream({
+      onConnected: () => {
+        console.log("✅ [APP] SSE conectado");
+      },
+
+      onPedidoStatusChanged: (event) => {
+        console.log(
+          "📩 [APP] pedido_status_changed",
+          event
+        );
+
+        setPedidos((prev) =>
+          prev.map((p) =>
+            p.nunota === event.nunota
+              ? {
+                  ...p,
+                  statusConferencia:
+                    event.statusConferencia,
+                }
+              : p
+          )
+        );
+
+        setTimeout(() => {
+          carregar();
+        }, 800);
+      },
+
+      onPedidoFinalizado: (event) => {
+        console.log(
+          "📩 [APP] pedido_finalizado",
+          event
+        );
+
+        setPedidos((prev) =>
+          prev.map((p) =>
+            p.nunota === event.nunota
+              ? {
+                  ...p,
+                  statusConferencia:
+                    event.statusConferencia,
+                }
+              : p
+          )
+        );
+
+        setTimeout(() => {
+          carregar();
+        }, 800);
+      },
+    });
 
     return () => {
-      ativo = false;
-      clearInterval(interval);
+      disconnect();
       limparFilaAudio();
     };
-  }, []);
+  }, [carregar]);
 
   return {
     pedidos,
@@ -105,5 +135,6 @@ export function useFilaConferencia(): UseFilaConferenciaResult {
     erro,
     selecionado,
     setSelecionado,
+    refresh: carregar,
   };
 }
