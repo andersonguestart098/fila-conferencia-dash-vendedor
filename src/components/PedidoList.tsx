@@ -362,7 +362,7 @@ function saveConferenteByNunota(next: ConferenteByNunota) {
 export function PedidoList({
   pedidos,
   loadingInicial,
-  erro,
+  erro: _erro,
   selecionado,
   onSelect,
 }: PedidoListProps) {
