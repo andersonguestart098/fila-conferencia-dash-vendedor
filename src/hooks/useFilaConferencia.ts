@@ -1,6 +1,6 @@
 // src/hooks/useFilaConferencia.ts
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { DetalhePedido } from "../types/conferencia";
 import { buscarPedidosPendentes } from "../api/conferencia";
 import { conectarConferenciaStream } from "../api/conferenciaStream";
@@ -9,6 +9,7 @@ import {
   AudioLogger,
   limparFilaAudio,
   dispararAlertasVoz,
+  marcarJaTocados,
 } from "../../public/audio/audioManager";
 
 interface UseFilaConferenciaResult {
@@ -27,6 +28,8 @@ export function useFilaConferencia(): UseFilaConferenciaResult {
   const [selecionado, setSelecionado] =
     useState<DetalhePedido | null>(null);
 
+  const primeiraCarrega = useRef(true);
+
   const carregar = useCallback(async () => {
     try {
       console.log("📡 [API] Buscando pedidos sob demanda...");
@@ -42,7 +45,17 @@ export function useFilaConferencia(): UseFilaConferenciaResult {
       setErro(null);
       setLoadingInicial(false);
 
-      dispararAlertasVoz(lista);
+      if (primeiraCarrega.current) {
+        // Na carga inicial, marca todos os "C" históricos como já tocados
+        // sem disparar áudio — evita spam ao puxar todo o DB
+        primeiraCarrega.current = false;
+        const historicos = lista
+          .filter((p) => p.statusConferencia === "C")
+          .map((p) => p.nunota);
+        marcarJaTocados(historicos);
+      } else {
+        dispararAlertasVoz(lista);
+      }
 
       setPedidos(lista);
 

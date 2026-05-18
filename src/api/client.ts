@@ -2,8 +2,7 @@
 import axios from "axios";
 
 // ✅ URL centralizada
-export const API_BASE_URL =
-  "https://api-sankhya-fila-conferencia-6bbe82fb50b8.herokuapp.com/";
+export const API_BASE_URL = "https://api-sankhya-fila-conferencia-6bbe82fb50b8.herokuapp.com/";
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

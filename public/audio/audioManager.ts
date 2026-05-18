@@ -348,6 +348,17 @@ export function dispararAlertasVoz(lista: DetalhePedido[]) {
 }
 
 /* -----------------------------------------------------
+   Marca nunotas como já tocados sem tocar áudio
+   (usado na carga inicial pra ignorar pedidos históricos)
+----------------------------------------------------- */
+export function marcarJaTocados(nunotas: number[]) {
+  for (const n of nunotas) {
+    playedNunotas.add(n);
+  }
+  AudioLogger.log("SEED_PLAYED", `${nunotas.length} pedidos marcados como já tocados (sem áudio)`, { nunotas });
+}
+
+/* -----------------------------------------------------
    Utilitários para os botões de debug da UI
 ----------------------------------------------------- */
 export function getEstadoFila() {

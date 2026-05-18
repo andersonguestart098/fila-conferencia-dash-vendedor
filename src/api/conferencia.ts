@@ -68,7 +68,7 @@ export async function buscarPedidosPendentes(): Promise<DetalhePedido[] | null> 
     if (pendentesController) pendentesController.abort();
     pendentesController = new AbortController();
 
-    const url = "/api/conferencia/pedidos-pendentes";
+    const url = "/api/conferencia/fila-db";
 
     const data = await getComRetry<PedidosResponse | DetalhePedido[]>(
       url,
