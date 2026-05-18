@@ -543,12 +543,9 @@ export function PedidoList({
     dispararAlertasVoz(pedidos);
   }, [pedidos]);
 
-  function getConferenteExibicao(p: any): Conferente | null {
-    const nomeBackend = (p as any).conferenteNome as string | undefined;
-    const idBackend = (p as any).conferenteId as number | undefined;
-
-    if (nomeBackend && typeof idBackend === "number") {
-      return { codUsuario: idBackend, nome: nomeBackend };
+  function getConferenteExibicao(p: DetalhePedido): Conferente | null {
+    if (p.nomeConferente) {
+      return { codUsuario: 0, nome: p.nomeConferente };
     }
 
     return conferenteByNunota[p.nunota] ?? null;
