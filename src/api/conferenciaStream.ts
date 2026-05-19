@@ -27,6 +27,7 @@ type Params = {
   onPedidoStatusChanged?: (event: PedidoStatusChangedEvent) => void;
   onPedidoFinalizado?: (event: PedidoFinalizadoEvent) => void;
   onConnected?: () => void;
+  onReconnect?: () => void;
   onError?: (error: Event) => void;
 };
 
@@ -34,6 +35,7 @@ export function conectarConferenciaStream({
   onPedidoStatusChanged,
   onPedidoFinalizado,
   onConnected,
+  onReconnect,
   onError,
 }: Params) {
   const url = `${API_BASE_URL}api/conferencia/stream`;
@@ -41,12 +43,19 @@ export function conectarConferenciaStream({
   logSse("📡 [SSE_CLIENT_CONNECTING]", { url });
 
   const source = new EventSource(url);
+  let wasConnected = false;
 
   source.addEventListener("connected", (event) => {
     const raw = (event as MessageEvent).data;
 
-    logSse("✅ [SSE_CLIENT_CONNECTED]", raw);
+    if (wasConnected) {
+      logSse("🔄 [SSE_CLIENT_RECONNECTED] disparando refresh");
+      onReconnect?.();
+    }
 
+    wasConnected = true;
+
+    logSse("✅ [SSE_CLIENT_CONNECTED]", raw);
     onConnected?.();
   });
 
@@ -63,7 +72,6 @@ export function conectarConferenciaStream({
       };
 
       logSse("📩 [SSE_CLIENT_EVENT] pedido_status_changed", parsed);
-
       onPedidoStatusChanged?.(parsed);
     } catch (error) {
       console.error("❌ [SSE_CLIENT_PARSE_ERROR]", error);
@@ -83,7 +91,6 @@ export function conectarConferenciaStream({
       };
 
       logSse("📩 [SSE_CLIENT_EVENT] pedido_finalizado", parsed);
-
       onPedidoFinalizado?.(parsed);
     } catch (error) {
       console.error("❌ [SSE_CLIENT_PARSE_ERROR]", error);

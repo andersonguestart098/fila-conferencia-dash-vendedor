@@ -21,14 +21,18 @@ interface UseFilaConferenciaResult {
   refresh: () => Promise<void>;
 }
 
+const POLLING_INTERVAL_MS = 30_000; // 30s — leve e silencioso
+
 export function useFilaConferencia(): UseFilaConferenciaResult {
   const [pedidos, setPedidos] = useState<DetalhePedido[]>([]);
   const [loadingInicial, setLoadingInicial] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
-  const [selecionado, setSelecionado] =
-    useState<DetalhePedido | null>(null);
+  const [selecionado, setSelecionado] = useState<DetalhePedido | null>(null);
 
   const primeiraCarrega = useRef(true);
+
+  // Controle do polling: evita chamadas simultâneas
+  const pollingEmAndamentoRef = useRef(false);
 
   const carregar = useCallback(async () => {
     try {
@@ -76,11 +80,9 @@ export function useFilaConferencia(): UseFilaConferenciaResult {
     }
   }, []);
 
+  // Carga inicial + SSE
   useEffect(() => {
-    AudioLogger.log(
-      "INSTANCE_INIT",
-      "Inicializando painel admin"
-    );
+    AudioLogger.log("INSTANCE_INIT", "Inicializando painel admin");
 
     carregar();
 
@@ -89,20 +91,18 @@ export function useFilaConferencia(): UseFilaConferenciaResult {
         console.log("✅ [APP] SSE conectado");
       },
 
+      onReconnect: () => {
+        console.log("🔄 [APP] SSE reconectado — fazendo refresh");
+        carregar();
+      },
+
       onPedidoStatusChanged: (event) => {
-        console.log(
-          "📩 [APP] pedido_status_changed",
-          event
-        );
+        console.log("📩 [APP] pedido_status_changed", event);
 
         setPedidos((prev) =>
           prev.map((p) =>
             p.nunota === event.nunota
-              ? {
-                  ...p,
-                  statusConferencia:
-                    event.statusConferencia,
-                }
+              ? { ...p, statusConferencia: event.statusConferencia }
               : p
           )
         );
@@ -113,19 +113,12 @@ export function useFilaConferencia(): UseFilaConferenciaResult {
       },
 
       onPedidoFinalizado: (event) => {
-        console.log(
-          "📩 [APP] pedido_finalizado",
-          event
-        );
+        console.log("📩 [APP] pedido_finalizado", event);
 
         setPedidos((prev) =>
           prev.map((p) =>
             p.nunota === event.nunota
-              ? {
-                  ...p,
-                  statusConferencia:
-                    event.statusConferencia,
-                }
+              ? { ...p, statusConferencia: event.statusConferencia }
               : p
           )
         );
@@ -140,6 +133,29 @@ export function useFilaConferencia(): UseFilaConferenciaResult {
       disconnect();
       limparFilaAudio();
     };
+  }, [carregar]);
+
+  // Polling silencioso a cada 30s
+  // — não mostra loading, não interrompe o usuário
+  // — ignora se já tem uma chamada em andamento
+  useEffect(() => {
+    const id = setInterval(async () => {
+      if (pollingEmAndamentoRef.current) {
+        console.log("⏭️ [POLLING] chamada anterior ainda em andamento, pulando");
+        return;
+      }
+
+      pollingEmAndamentoRef.current = true;
+      console.log("🔁 [POLLING] refresh silencioso");
+
+      try {
+        await carregar();
+      } finally {
+        pollingEmAndamentoRef.current = false;
+      }
+    }, POLLING_INTERVAL_MS);
+
+    return () => clearInterval(id);
   }, [carregar]);
 
   return {
