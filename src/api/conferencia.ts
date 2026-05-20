@@ -64,47 +64,60 @@ async function getComRetry<T>(
  */
 export async function buscarPedidosPendentes(): Promise<DetalhePedido[] | null> {
   try {
-    // Cancela o request anterior dessa mesma função (se existir)
     if (pendentesController) pendentesController.abort();
     pendentesController = new AbortController();
 
     const url = "/api/conferencia/fila-db";
+    const signal = pendentesController.signal;
 
-    const data = await getComRetry<PedidosResponse | DetalhePedido[]>(
+    const primeira = await getComRetry<PedidosResponse | DetalhePedido[]>(
       url,
-      {
-        signal: pendentesController.signal,
-        timeout: 60000,
-        params: { pageSize: 1000 },
-      },
+      { signal, timeout: 60000 },
       1
     );
 
-    if (data == null) {
+    if (primeira == null) {
       console.warn("⚠ [API] Sem data, retornando lista vazia");
       return [];
     }
 
-    // ✅ novo formato: { pedidos, total, page, pageSize }
-    if (!Array.isArray(data) && Array.isArray(data.pedidos)) {
-      console.log("✅ [API] Resposta no formato paginado:", {
-        total: data.total,
-        page: data.page,
-        pageSize: data.pageSize,
-        pedidos: data.pedidos.length,
-      });
-      return data.pedidos;
+    // formato simples: array direto
+    if (Array.isArray(primeira)) {
+      console.log("✅ [API] Resposta array direto:", { pedidos: primeira.length });
+      return primeira;
     }
 
-    // ✅ formato antigo: []
-    if (Array.isArray(data)) {
-      console.log("✅ [API] Resposta no formato antigo:", {
-        pedidos: data.length,
-      });
-      return data;
+    // formato paginado: { pedidos, total, page, pageSize }
+    if (Array.isArray(primeira.pedidos)) {
+      const { pedidos, total, pageSize } = primeira;
+
+      console.log("✅ [API] Página 1:", { pedidos: pedidos.length, total, pageSize });
+
+      // se veio tudo na primeira página, retorna direto
+      if (!total || !pageSize || pedidos.length >= total) {
+        return pedidos;
+      }
+
+      // busca páginas restantes em paralelo
+      const totalPaginas = Math.ceil(total / pageSize);
+      const paginas = Array.from({ length: totalPaginas - 1 }, (_, i) => i + 2);
+
+      const resultados = await Promise.all(
+        paginas.map((page) =>
+          getComRetry<PedidosResponse>(
+            url,
+            { signal, timeout: 60000, params: { page } },
+            1
+          ).then((r) => r.pedidos ?? [])
+        )
+      );
+
+      const todos = [...pedidos, ...resultados.flat()];
+      console.log("✅ [API] Total após todas as páginas:", todos.length);
+      return todos;
     }
 
-    console.warn("⚠ [API] Resposta inesperada, retornando lista vazia", data);
+    console.warn("⚠ [API] Resposta inesperada, retornando lista vazia", primeira);
     return [];
   } catch (error: any) {
     const isCanceled =
