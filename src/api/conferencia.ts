@@ -75,6 +75,7 @@ export async function buscarPedidosPendentes(): Promise<DetalhePedido[] | null> 
       {
         signal: pendentesController.signal,
         timeout: 60000,
+        params: { pageSize: 1000 },
       },
       1
     );
